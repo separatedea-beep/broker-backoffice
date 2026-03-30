@@ -7,11 +7,37 @@ const CONFIG = {
   // Bridge connection
   BRIDGE: {
     TYPE: 'mock',               // 'mock' | 'metaapi' | 'fix' | 'direct_mt5' | 'custom'
-    URL: '',                    // Bridge REST endpoint
+    URL: '',                    // Bridge REST endpoint base URL
     WS_URL: '',                 // Bridge WebSocket endpoint
-    API_KEY: '',                // Bridge API key/token
-    RECONNECT_DELAY: 3000,
-    MAX_RECONNECT: 10,
+    API_KEY: '',                // Bridge API key / auth token
+    ENVIRONMENT: 'live',        // 'live' | 'demo' | 'paper'
+    API_VERSION: 'v1',          // API version for URL prefix
+
+    // Connection settings
+    CONNECT_TIMEOUT: 10000,     // ms — initial connection timeout
+    REQUEST_TIMEOUT: 15000,     // ms — per-request timeout
+    PING_INTERVAL: 30000,       // ms — latency measurement interval
+
+    // Reconnection (WebSocket)
+    RECONNECT_DELAY: 3000,      // ms — base delay before first reconnect
+    MAX_RECONNECT: 10,          // max reconnect attempts before fallback
+    BACKOFF_MULTIPLIER: 1.5,    // exponential backoff multiplier
+    MAX_RECONNECT_DELAY: 30000, // ms — cap on backoff delay
+
+    // WebSocket heartbeat
+    HEARTBEAT_INTERVAL: 15000,  // ms — ping interval
+    PING_TIMEOUT: 5000,         // ms — pong wait before declaring dead
+
+    // Retry policy (REST)
+    RETRY_ATTEMPTS: 3,          // retries on 5xx / network error
+    RETRY_DELAY: 1000,          // ms — base retry delay
+
+    // Failover
+    FAILOVER_URL: '',           // backup bridge URL (auto-switch on failure)
+    FAILOVER_WS_URL: '',        // backup WebSocket URL
+
+    // Security
+    TLS_VERIFY: true,           // verify TLS certificates
   },
 
   // Back Office API (your own server, if any)

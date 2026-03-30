@@ -12,8 +12,13 @@ const S = {
   bridge: {
     connected: false,
     type: CONFIG.BRIDGE.TYPE,
+    state: 'disconnected',    // disconnected | connecting | connected | reconnecting | error
     lastPing: null,
     latency: 0,
+    lastError: null,
+    wsState: 'none',          // none | connecting | connected | reconnecting
+    wsChannels: [],
+    reconnectAttempts: 0,
   },
 
   // Dashboard KPIs
@@ -68,6 +73,8 @@ const S = {
     dividendAdjustments: [],
     corporateActions: [],
     disputes: [],
+    pending: [],              // pending/conditional orders
+    rejected: [],             // rejected/failed order log
     filters: { account: '', symbol: '', dateFrom: '', dateTo: '' },
     activeTab: 'history',
     page: 1,

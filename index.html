@@ -45,7 +45,7 @@
               <span class="icon">&#128276;</span>
               <span class="badge" id="notif-badge">3</span>
             </button>
-            <button class="btn-icon" id="btn-bridge-status" title="Bridge Status">
+            <button class="btn-icon" id="btn-bridge-status" title="Bridge Status" onclick="Header.showConnectionDetails()">
               <span class="status-dot" id="bridge-dot"></span>
               <span>Bridge</span>
             </button>
@@ -113,6 +113,7 @@
   <script src="js/state.js"></script>
   <script src="js/utils.js"></script>
   <script src="js/services/ruin.js"></script>
+  <script src="js/services/websocket.js"></script>
   <script src="js/services/bridge.js"></script>
   <script src="js/services/mock.js"></script>
   <script src="js/services/api.js"></script>
