@@ -73,6 +73,18 @@ const U = {
   // Deep clone
   clone(o) { return JSON.parse(JSON.stringify(o)); },
 
+  // Label formatters
+  bookLabel(v) { return v === 'a_book' ? 'A' : v === 'b_book' ? 'B' : v; },
+  dirLabel(v) { return v ? v.charAt(0).toUpperCase() + v.slice(1) : '-'; },
+  statusLabel(v) { return v ? v.replace(/_/g, ' ') : '-'; },
+
+  // HTML escape (prevent XSS)
+  escape(str) {
+    if (str == null) return '';
+    const s = String(str);
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  },
+
   // Random helpers for mock data
   rand(min, max) { return Math.random() * (max - min) + min; },
   randInt(min, max) { return Math.floor(U.rand(min, max + 1)); },

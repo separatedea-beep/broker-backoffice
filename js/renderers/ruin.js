@@ -18,32 +18,29 @@ const RuinRenderer = {
     const sel = S.ruin.selectedAccount;
     const p = S.ruin.params;
 
-    view.innerHTML = `
-      <div class="card">
-        <div class="card-header">
-          <h3>Select Trader</h3>
-          <div class="card-filters">
-            <select id="ruin-account-select" class="form-control" style="min-width:250px" onchange="RuinRenderer.selectAccount(this.value)">
-              <option value="">— Select a trader —</option>
-              ${accounts.map(a => `<option value="${a.id}" ${sel && sel.id === a.id ? 'selected' : ''}>${a.login} — ${a.name} (${U.money(a.balance)})</option>`).join('')}
-            </select>
-            <select class="form-control form-sm" onchange="S.ruin.params.sizing=this.value; RuinRenderer.runAnalysis()">
-              <option value="fixed_lot" ${p.sizing==='fixed_lot'?'selected':''}>Fixed Lot</option>
-              <option value="fixed_fractional" ${p.sizing==='fixed_fractional'?'selected':''}>Fixed Fractional (${p.riskPercent}%)</option>
-              <option value="half_kelly" ${p.sizing==='half_kelly'?'selected':''}>Half Kelly</option>
-              <option value="kelly" ${p.sizing==='kelly'?'selected':''}>Full Kelly</option>
-            </select>
-            <select class="form-control form-sm" onchange="S.ruin.params.ruinThreshold=parseFloat(this.value); RuinRenderer.runAnalysis()">
-              <option value="0.05" ${p.ruinThreshold===0.05?'selected':''}>Ruin = 5%</option>
-              <option value="0.10" ${p.ruinThreshold===0.10?'selected':''}>Ruin = 10%</option>
-              <option value="0.20" ${p.ruinThreshold===0.20?'selected':''}>Ruin = 20%</option>
-              <option value="0.50" ${p.ruinThreshold===0.50?'selected':''}>Ruin = 50%</option>
-            </select>
-          </div>
-        </div>
-      </div>
-      <div id="ruin-content">${sel ? '' : '<div class="card"><div class="card-body"><p class="text-muted" style="text-align:center;padding:40px">Select a trader above to run the analysis</p></div></div>'}</div>
-    `;
+    const filterHtml = `
+      <select id="ruin-account-select" class="form-control" style="min-width:250px" onchange="RuinRenderer.selectAccount(this.value)">
+        <option value="">— Select a trader —</option>
+        ${accounts.map(a => `<option value="${a.id}" ${sel && sel.id === a.id ? 'selected' : ''}>${a.login} — ${a.name} (${U.money(a.balance)})</option>`).join('')}
+      </select>
+      <select class="form-control form-sm" onchange="S.ruin.params.sizing=this.value; RuinRenderer.runAnalysis()">
+        <option value="fixed_lot" ${p.sizing==='fixed_lot'?'selected':''}>Fixed Lot</option>
+        <option value="fixed_fractional" ${p.sizing==='fixed_fractional'?'selected':''}>Fixed Fractional (${p.riskPercent}%)</option>
+        <option value="half_kelly" ${p.sizing==='half_kelly'?'selected':''}>Half Kelly</option>
+        <option value="kelly" ${p.sizing==='kelly'?'selected':''}>Full Kelly</option>
+      </select>
+      <select class="form-control form-sm" onchange="S.ruin.params.ruinThreshold=parseFloat(this.value); RuinRenderer.runAnalysis()">
+        <option value="0.05" ${p.ruinThreshold===0.05?'selected':''}>Ruin = 5%</option>
+        <option value="0.10" ${p.ruinThreshold===0.10?'selected':''}>Ruin = 10%</option>
+        <option value="0.20" ${p.ruinThreshold===0.20?'selected':''}>Ruin = 20%</option>
+        <option value="0.50" ${p.ruinThreshold===0.50?'selected':''}>Ruin = 50%</option>
+      </select>`;
+
+    const selectorCard = C.card('Select Trader', '', { filters: filterHtml });
+
+    const placeholder = sel ? '' : C.card(null, C.emptyState('Select a trader above to run the analysis'));
+
+    view.innerHTML = `${selectorCard}<div id="ruin-content">${placeholder}</div>`;
 
     if (sel) this.renderAnalysis();
   },
@@ -110,141 +107,102 @@ const RuinRenderer = {
     const kelly = acc.kellyFraction;
     const routing = RuinEngine.routingRecommendation(acc);
 
+    const recLabel = routing.recommendation === 'a_book' ? 'A-BOOK'
+                   : routing.recommendation === 'b_book' ? 'B-BOOK' : 'REVIEW';
+    const recBadgeCls = routing.recommendation === 'a_book' ? 'badge-info'
+                      : routing.recommendation === 'b_book' ? 'badge-purple' : 'badge-warning';
+
+    const porVariant = sim.probabilityOfRuin > 0.5 ? 'danger'
+                     : sim.probabilityOfRuin > 0.2 ? 'warning' : 'success';
+
+    const kpis = C.kpiGrid([
+      C.kpi('Edge / Trade',
+        `${edge >= 0 ? '+' : ''}${U.money(edge)}`,
+        `${U.money(acc.edgePerDay)}/day (${U.num(acc.tradeFrequency, 1)} trades/day)`,
+        { valueClass: edge >= 0 ? 'positive' : 'negative' }),
+      C.kpi('Win Rate',
+        U.pct(acc.winRate * 100),
+        `Avg W: ${U.money(acc.avgWin)} / Avg L: ${U.money(acc.avgLoss)}`),
+      C.kpi('Kelly Criterion',
+        U.pct(kelly * 100),
+        `Profit Factor: ${U.num(acc.profitFactor)}`),
+      C.kpi('Probability of Ruin',
+        U.pct(sim.probabilityOfRuin * 100),
+        `${sim.ruinCount}/${sim.paths} paths hit ruin (${U.pct(S.ruin.params.ruinThreshold * 100)} threshold)`,
+        { variant: porVariant }),
+      C.kpi('Recommended Book',
+        `<span class="badge ${recBadgeCls}" style="font-size:16px;padding:4px 12px">${recLabel}</span>`,
+        `<span class="text-sm">${routing.reason}</span>`),
+      C.kpi('Median Final Equity',
+        U.money(sim.finalEquity.median),
+        `5th: ${U.money(sim.finalEquity.p5)} / 95th: ${U.money(sim.finalEquity.p95)}`,
+        { valueClass: sim.finalEquity.median > acc.balance ? 'positive' : 'negative' }),
+      C.kpi('Expected Max Drawdown',
+        U.pct(sim.maxDrawdown.mean * 100),
+        `95th pct: ${U.pct(sim.maxDrawdown.p95 * 100)}`,
+        { valueClass: 'negative' }),
+      C.kpi('Sharpe Ratio (ann.)',
+        U.num(acc.sharpeRatio),
+        `${acc.totalTrades} total trades`,
+        { valueClass: acc.sharpeRatio >= 0 ? 'positive' : 'negative' }),
+    ]);
+
+    // Charts row
+    const mcChart = C.card(`Monte Carlo Equity Projection (${sim.paths} paths, ${sim.days}d)`,
+      '<div class="chart-container" style="height:350px"><canvas id="ruin-mc-chart"></canvas></div>');
+    const capitalChart = C.card('Probability of Ruin vs Starting Capital',
+      '<div class="chart-container" style="height:350px"><canvas id="ruin-capital-chart"></canvas></div>');
+    const chartsRow = C.grid2(mcChart, capitalChart);
+
+    // Position sizing comparison table
+    const sizingRows = sizing.map(s => {
+      const assessment = s.por < 0.15 ? 'Conservative' : s.por < 0.40 ? 'Moderate' : s.por < 0.70 ? 'Aggressive' : 'Dangerous';
+      const assessClass = s.por < 0.15 ? 'success' : s.por < 0.40 ? 'info' : s.por < 0.70 ? 'warning' : 'danger';
+      return `<tr class="${s.name === this._currentSizingLabel() ? 'row-highlight' : ''}">
+        <td><strong>${s.name}</strong></td>
+        <td>${s.fraction}</td>
+        <td class="text-right ${s.por > 0.5 ? 'text-danger' : s.por > 0.2 ? 'text-warning' : ''}">${U.pct(s.por * 100)}</td>
+        <td class="text-right ${s.expectedReturn >= 0 ? 'positive' : 'negative'}">${s.expectedReturn >= 0 ? '+' : ''}${U.pct(s.expectedReturn)}</td>
+        <td class="text-right">${U.money(s.medianFinal)}</td>
+        <td class="text-right negative">${U.pct(s.meanMaxDD)}</td>
+        <td class="text-right negative">${U.pct(s.p95MaxDD)}</td>
+        <td>${C.badge(assessment, assessClass)}</td>
+      </tr>`;
+    });
+
+    const sizingTable = C.simpleTable(
+      ['Strategy', 'Risk Fraction', 'PoR', 'Expected Return', 'Median Final Equity', 'Avg Max DD', '95th Max DD', 'Assessment'],
+      sizingRows);
+    const sizingCard = C.card('Position Sizing Strategy Comparison', sizingTable);
+
+    // Trader Profile
+    const tradeDistribution = C.detailGrid([
+      { label: 'Total Trades', value: acc.totalTrades },
+      { label: 'Win Rate', value: U.pct(acc.winRate * 100) },
+      { label: 'Avg Win', html: `<span class="positive">${U.money(acc.avgWin)}</span>` },
+      { label: 'Avg Loss', html: `<span class="negative">${U.money(acc.avgLoss)}</span>` },
+      { label: 'Win/Loss Ratio', value: U.num(acc.avgWin / acc.avgLoss) },
+      { label: 'Profit Factor', value: U.num(acc.profitFactor) },
+      { label: 'Trades/Day', value: U.num(acc.tradeFrequency, 1) },
+    ]);
+
+    const riskMetrics = C.detailGrid([
+      { label: 'Edge / Trade', html: C.pnl(edge) },
+      { label: 'Edge / Day', html: C.pnl(acc.edgePerDay) },
+      { label: 'Kelly Fraction', value: U.pct(kelly * 100) },
+      { label: 'Half-Kelly', value: U.pct(kelly * 50) },
+      { label: 'Sharpe (annualised)', value: U.num(acc.sharpeRatio) },
+      { label: 'Max Drawdown (hist.)', html: `<span class="negative">${U.pct(acc.maxDrawdown * 100)}</span>` },
+      { label: 'Current Balance', value: U.money(acc.balance) },
+    ]);
+
+    const profileBody = C.grid2(
+      `${C.sectionLabel('Trade Distribution')}${tradeDistribution}`,
+      `${C.sectionLabel('Risk Metrics')}${riskMetrics}`);
+    const profileCard = C.card('Trader Profile', profileBody);
+
     const content = U.$('#ruin-content');
-    content.innerHTML = `
-      <!-- KPI Cards -->
-      <div class="kpi-grid">
-        <div class="kpi-card">
-          <div class="kpi-label">Edge / Trade</div>
-          <div class="kpi-value ${edge >= 0 ? 'positive' : 'negative'}">${edge >= 0 ? '+' : ''}${U.money(edge)}</div>
-          <div class="kpi-sub">${U.money(acc.edgePerDay)}/day (${U.num(acc.tradeFrequency, 1)} trades/day)</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Win Rate</div>
-          <div class="kpi-value">${U.pct(acc.winRate * 100)}</div>
-          <div class="kpi-sub">Avg W: ${U.money(acc.avgWin)} / Avg L: ${U.money(acc.avgLoss)}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Kelly Criterion</div>
-          <div class="kpi-value">${U.pct(kelly * 100)}</div>
-          <div class="kpi-sub">Profit Factor: ${U.num(acc.profitFactor)}</div>
-        </div>
-        <div class="kpi-card ${sim.probabilityOfRuin > 0.5 ? 'kpi-danger' : sim.probabilityOfRuin > 0.2 ? 'kpi-warning' : 'kpi-success'}">
-          <div class="kpi-label">Probability of Ruin</div>
-          <div class="kpi-value">${U.pct(sim.probabilityOfRuin * 100)}</div>
-          <div class="kpi-sub">${sim.ruinCount}/${sim.paths} paths hit ruin (${U.pct(S.ruin.params.ruinThreshold * 100)} threshold)</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Recommended Book</div>
-          <div class="kpi-value"><span class="badge ${routing.recommendation === 'a_book' ? 'badge-info' : routing.recommendation === 'b_book' ? 'badge-purple' : 'badge-warning'}" style="font-size:16px;padding:4px 12px">${routing.recommendation === 'a_book' ? 'A-BOOK' : routing.recommendation === 'b_book' ? 'B-BOOK' : 'REVIEW'}</span></div>
-          <div class="kpi-sub text-sm">${routing.reason}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Median Final Equity</div>
-          <div class="kpi-value ${sim.finalEquity.median > acc.balance ? 'positive' : 'negative'}">${U.money(sim.finalEquity.median)}</div>
-          <div class="kpi-sub">5th: ${U.money(sim.finalEquity.p5)} / 95th: ${U.money(sim.finalEquity.p95)}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Expected Max Drawdown</div>
-          <div class="kpi-value negative">${U.pct(sim.maxDrawdown.mean * 100)}</div>
-          <div class="kpi-sub">95th pct: ${U.pct(sim.maxDrawdown.p95 * 100)}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-label">Sharpe Ratio (ann.)</div>
-          <div class="kpi-value ${acc.sharpeRatio >= 0 ? 'positive' : 'negative'}">${U.num(acc.sharpeRatio)}</div>
-          <div class="kpi-sub">${acc.totalTrades} total trades</div>
-        </div>
-      </div>
-
-      <!-- Charts Row -->
-      <div class="grid-2col">
-        <!-- Monte Carlo Equity Curves -->
-        <div class="card">
-          <div class="card-header"><h3>Monte Carlo Equity Projection (${sim.paths} paths, ${sim.days}d)</h3></div>
-          <div class="card-body chart-container" style="height:350px">
-            <canvas id="ruin-mc-chart"></canvas>
-          </div>
-        </div>
-
-        <!-- PoR vs Starting Capital -->
-        <div class="card">
-          <div class="card-header"><h3>Probability of Ruin vs Starting Capital</h3></div>
-          <div class="card-body chart-container" style="height:350px">
-            <canvas id="ruin-capital-chart"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <!-- Position Sizing Comparison -->
-      <div class="card">
-        <div class="card-header"><h3>Position Sizing Strategy Comparison</h3></div>
-        <div class="card-body">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Strategy</th>
-                <th>Risk Fraction</th>
-                <th class="text-right">PoR</th>
-                <th class="text-right">Expected Return</th>
-                <th class="text-right">Median Final Equity</th>
-                <th class="text-right">Avg Max DD</th>
-                <th class="text-right">95th Max DD</th>
-                <th>Assessment</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${sizing.map(s => {
-                const assessment = s.por < 0.15 ? 'Conservative' : s.por < 0.40 ? 'Moderate' : s.por < 0.70 ? 'Aggressive' : 'Dangerous';
-                const assessClass = s.por < 0.15 ? 'badge-success' : s.por < 0.40 ? 'badge-info' : s.por < 0.70 ? 'badge-warning' : 'badge-danger';
-                return `<tr class="${s.name === this._currentSizingLabel() ? 'row-highlight' : ''}">
-                  <td><strong>${s.name}</strong></td>
-                  <td>${s.fraction}</td>
-                  <td class="text-right ${s.por > 0.5 ? 'text-danger' : s.por > 0.2 ? 'text-warning' : ''}">${U.pct(s.por * 100)}</td>
-                  <td class="text-right ${s.expectedReturn >= 0 ? 'positive' : 'negative'}">${s.expectedReturn >= 0 ? '+' : ''}${U.pct(s.expectedReturn)}</td>
-                  <td class="text-right">${U.money(s.medianFinal)}</td>
-                  <td class="text-right negative">${U.pct(s.meanMaxDD)}</td>
-                  <td class="text-right negative">${U.pct(s.p95MaxDD)}</td>
-                  <td><span class="badge ${assessClass}">${assessment}</span></td>
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Distribution Stats -->
-      <div class="card">
-        <div class="card-header"><h3>Trader Profile</h3></div>
-        <div class="card-body">
-          <div class="grid-2col">
-            <div>
-              <h4 style="margin-bottom:10px;font-size:13px;color:var(--text-secondary)">Trade Distribution</h4>
-              <div class="detail-grid">
-                <div class="detail-row"><span class="detail-label">Total Trades</span><span>${acc.totalTrades}</span></div>
-                <div class="detail-row"><span class="detail-label">Win Rate</span><span>${U.pct(acc.winRate * 100)}</span></div>
-                <div class="detail-row"><span class="detail-label">Avg Win</span><span class="positive">${U.money(acc.avgWin)}</span></div>
-                <div class="detail-row"><span class="detail-label">Avg Loss</span><span class="negative">${U.money(acc.avgLoss)}</span></div>
-                <div class="detail-row"><span class="detail-label">Win/Loss Ratio</span><span>${U.num(acc.avgWin / acc.avgLoss)}</span></div>
-                <div class="detail-row"><span class="detail-label">Profit Factor</span><span>${U.num(acc.profitFactor)}</span></div>
-                <div class="detail-row"><span class="detail-label">Trades/Day</span><span>${U.num(acc.tradeFrequency, 1)}</span></div>
-              </div>
-            </div>
-            <div>
-              <h4 style="margin-bottom:10px;font-size:13px;color:var(--text-secondary)">Risk Metrics</h4>
-              <div class="detail-grid">
-                <div class="detail-row"><span class="detail-label">Edge / Trade</span><span class="${edge >= 0 ? 'positive' : 'negative'}">${U.money(edge)}</span></div>
-                <div class="detail-row"><span class="detail-label">Edge / Day</span><span class="${acc.edgePerDay >= 0 ? 'positive' : 'negative'}">${U.money(acc.edgePerDay)}</span></div>
-                <div class="detail-row"><span class="detail-label">Kelly Fraction</span><span>${U.pct(kelly * 100)}</span></div>
-                <div class="detail-row"><span class="detail-label">Half-Kelly</span><span>${U.pct(kelly * 50)}</span></div>
-                <div class="detail-row"><span class="detail-label">Sharpe (annualised)</span><span>${U.num(acc.sharpeRatio)}</span></div>
-                <div class="detail-row"><span class="detail-label">Max Drawdown (hist.)</span><span class="negative">${U.pct(acc.maxDrawdown * 100)}</span></div>
-                <div class="detail-row"><span class="detail-label">Current Balance</span><span>${U.money(acc.balance)}</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
+    content.innerHTML = `${kpis}${chartsRow}${sizingCard}${profileCard}`;
 
     this._renderMCChart();
     this._renderCapitalChart();

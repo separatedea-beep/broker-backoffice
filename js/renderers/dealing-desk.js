@@ -19,77 +19,66 @@ const DealingDeskRenderer = {
     const totalUnrealized = filtered.reduce((s, p) => s + p.unrealizedPnl, 0);
     const totalVolume = filtered.reduce((s, p) => s + p.volume, 0);
 
-    U.$('#view-dealing-desk').innerHTML = `
-      <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-label">Open Positions</div><div class="kpi-value">${filtered.length}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Total Volume</div><div class="kpi-value">${U.lots(totalVolume)} lots</div></div>
-        <div class="kpi-card"><div class="kpi-label">Unrealized P&L</div><div class="kpi-value ${U.pnlClass(totalUnrealized)}">${U.pnlSign(totalUnrealized)}${U.money(totalUnrealized)}</div></div>
-        <div class="kpi-card"><div class="kpi-label">A-Book Positions</div><div class="kpi-value">${filtered.filter(p => p.book === 'a_book').length}</div></div>
-        <div class="kpi-card"><div class="kpi-label">B-Book Positions</div><div class="kpi-value">${filtered.filter(p => p.book === 'b_book').length}</div></div>
-        <div class="kpi-card ${dd.stopoutQueue.length > 0 ? 'kpi-danger' : ''}"><div class="kpi-label">Stop-Out Queue</div><div class="kpi-value">${dd.stopoutQueue.length}</div></div>
-      </div>
+    const kpis = C.kpiGrid([
+      C.kpi('Open Positions', filtered.length),
+      C.kpi('Total Volume', `${U.lots(totalVolume)} lots`),
+      C.kpiPnl('Unrealized P&L', totalUnrealized),
+      C.kpi('A-Book Positions', filtered.filter(p => p.book === 'a_book').length),
+      C.kpi('B-Book Positions', filtered.filter(p => p.book === 'b_book').length),
+      C.kpi('Stop-Out Queue', dd.stopoutQueue.length, undefined,
+        { variant: dd.stopoutQueue.length > 0 ? 'danger' : undefined }),
+    ]);
 
-      <!-- Exposure Heatmap -->
-      <div class="card">
-        <div class="card-header"><h3>Net Exposure by Symbol</h3></div>
-        <div class="card-body">
-          <div class="exposure-grid">
-            ${Object.entries(dd.exposure).sort((a, b) => Math.abs(b[1].net) - Math.abs(a[1].net)).map(([sym, e]) => `
-              <div class="exposure-cell ${Math.abs(e.net) > 15 ? 'exp-high' : Math.abs(e.net) > 5 ? 'exp-med' : 'exp-low'} ${e.net > 0 ? 'exp-long' : 'exp-short'}">
-                <div class="exp-sym">${sym}</div>
-                <div class="exp-net">${e.net > 0 ? '+' : ''}${U.lots(e.net)}</div>
-                <div class="exp-detail">L: ${U.lots(e.long)} / S: ${U.lots(e.short)}</div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      </div>
+    const exposureCard = C.card('Net Exposure by Symbol',
+      `<div class="exposure-grid">${
+        Object.entries(dd.exposure)
+          .sort((a, b) => Math.abs(b[1].net) - Math.abs(a[1].net))
+          .map(([sym, e]) => C.exposureCell(sym, e)).join('')
+      }</div>`);
 
-      <!-- Live Position Grid -->
-      <div class="card">
-        <div class="card-header">
-          <h3>Live Positions</h3>
-          <div class="card-filters">
-            <select class="form-control form-sm" onchange="S.dealingDesk.filters.symbol=this.value; DealingDeskRenderer.render()">
-              <option value="all">All Symbols</option>
-              ${[...new Set(positions.map(p => p.symbol))].sort().map(s => `<option value="${s}" ${f.symbol === s ? 'selected' : ''}>${s}</option>`).join('')}
-            </select>
-            <select class="form-control form-sm" onchange="S.dealingDesk.filters.book=this.value; DealingDeskRenderer.render()">
-              <option value="all" ${f.book==='all'?'selected':''}>All Books</option>
-              <option value="a_book" ${f.book==='a_book'?'selected':''}>A-Book</option>
-              <option value="b_book" ${f.book==='b_book'?'selected':''}>B-Book</option>
-            </select>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="table-scroll">
-            <table class="data-table compact">
-              <thead><tr>
-                <th>Ticket</th><th>Login</th><th>Name</th><th>Symbol</th><th>Dir</th><th>Volume</th><th>Open</th><th>Current</th><th>P&L</th><th>Swap</th><th>Book</th><th>LP</th><th>Open Time</th><th>Actions</th>
-              </tr></thead>
-              <tbody>
-                ${filtered.sort((a, b) => Math.abs(b.unrealizedPnl) - Math.abs(a.unrealizedPnl)).map(p => `<tr class="${Math.abs(p.unrealizedPnl) > 3000 ? 'row-highlight' : ''}">
-                  <td>${p.ticket}</td>
-                  <td>${p.login}</td>
-                  <td>${p.name}</td>
-                  <td><strong>${p.symbol}</strong></td>
-                  <td><span class="badge ${p.direction === 'buy' ? 'badge-success' : 'badge-danger'}">${p.direction}</span></td>
-                  <td>${U.lots(p.volume)}</td>
-                  <td>${U.num(p.openPrice, 5)}</td>
-                  <td>${U.num(p.currentPrice, 5)}</td>
-                  <td class="${U.pnlClass(p.unrealizedPnl)}"><strong>${U.pnlSign(p.unrealizedPnl)}${U.money(p.unrealizedPnl)}</strong></td>
-                  <td>${U.money(p.swap)}</td>
-                  <td><span class="badge ${p.book === 'a_book' ? 'badge-info' : 'badge-purple'}">${p.book === 'a_book' ? 'A' : 'B'}</span></td>
-                  <td>${p.lp}</td>
-                  <td>${U.ago(p.openTime)}</td>
-                  <td><button class="btn btn-xs btn-danger" onclick="DealingDeskRenderer.closePosition(${p.ticket})">Close</button></td>
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    `;
+    const symbolOpts = [...new Set(positions.map(p => p.symbol))].sort()
+      .map(s => ({ value: s, label: s }));
+
+    const filters = C.filterBar([
+      { type: 'select', label: 'Symbols', value: f.symbol,
+        options: ['all', ...symbolOpts],
+        onChange: "S.dealingDesk.filters.symbol=this.value; DealingDeskRenderer.render()" },
+      { type: 'select', label: 'Books', value: f.book,
+        options: [
+          { value: 'all', label: 'All Books' },
+          { value: 'a_book', label: 'A-Book' },
+          { value: 'b_book', label: 'B-Book' },
+        ],
+        onChange: "S.dealingDesk.filters.book=this.value; DealingDeskRenderer.render()" },
+    ]);
+
+    const sortedPositions = filtered.sort((a, b) => Math.abs(b.unrealizedPnl) - Math.abs(a.unrealizedPnl));
+
+    const positionRows = sortedPositions.map(p => `<tr class="${Math.abs(p.unrealizedPnl) > 3000 ? 'row-highlight' : ''}">
+      <td>${p.ticket}</td>
+      <td>${p.login}</td>
+      <td>${p.name}</td>
+      <td><strong>${p.symbol}</strong></td>
+      <td>${C.dirBadge(p.direction)}</td>
+      <td>${U.lots(p.volume)}</td>
+      <td>${U.num(p.openPrice, 5)}</td>
+      <td>${U.num(p.currentPrice, 5)}</td>
+      <td>${C.pnlBold(p.unrealizedPnl)}</td>
+      <td>${U.money(p.swap)}</td>
+      <td>${C.bookBadge(p.book)}</td>
+      <td>${p.lp}</td>
+      <td>${U.ago(p.openTime)}</td>
+      <td>${C.actionBtn('Close', `DealingDeskRenderer.closePosition(${p.ticket})`, 'danger')}</td>
+    </tr>`);
+
+    const positionsTable = C.simpleTable(
+      ['Ticket', 'Login', 'Name', 'Symbol', 'Dir', 'Volume', 'Open', 'Current', 'P&L', 'Swap', 'Book', 'LP', 'Open Time', 'Actions'],
+      positionRows,
+      { compact: true });
+
+    const positionsCard = C.card('Live Positions', positionsTable, { filters });
+
+    U.$('#view-dealing-desk').innerHTML = `${kpis}${exposureCard}${positionsCard}`;
   },
 
   closePosition(ticket) {
@@ -105,39 +94,34 @@ const DealingDeskRenderer = {
     Header.setTitle('A/B Book Routing');
     const routing = S.dealingDesk.routing;
 
-    U.$('#view-rerouting').innerHTML = `
-      <div class="card">
-        <div class="card-header">
-          <h3>Account Routing Table — PoR-Enhanced</h3>
-          <a class="btn btn-sm btn-primary" onclick="BO.navigate('ruin-analysis')">Open Ruin Analysis</a>
-        </div>
-        <div class="card-body">
-          <div class="table-scroll">
-          <table class="data-table">
-            <thead><tr><th>Login</th><th>Name</th><th>Win Rate</th><th>Edge/Trade</th><th>Kelly %</th><th>PoR</th><th>Toxicity</th><th>Current</th><th>Recommended</th><th class="text-sm">Reason</th><th>Actions</th></tr></thead>
-            <tbody>
-              ${routing.map(r => `<tr>
-                <td>${r.login}</td>
-                <td>${r.name}</td>
-                <td>${U.pct((r.winRate || 0) * 100)}</td>
-                <td class="${(r.edgePerTrade || 0) >= 0 ? 'positive' : 'negative'}">${U.money(r.edgePerTrade || 0)}</td>
-                <td>${U.pct((r.kellyFraction || 0) * 100)}</td>
-                <td><span class="toxicity-badge ${(r.por || 0) > 0.6 ? 'tox-low' : (r.por || 0) > 0.2 ? 'tox-med' : 'tox-high'}">${U.pct((r.por || 0) * 100, 0)}</span></td>
-                <td><span class="toxicity-badge ${r.toxicity > 70 ? 'tox-high' : r.toxicity > 40 ? 'tox-med' : 'tox-low'}">${r.toxicity}</span></td>
-                <td><span class="badge ${r.currentBook === 'a_book' ? 'badge-info' : 'badge-purple'}">${r.currentBook === 'a_book' ? 'A' : 'B'}</span></td>
-                <td><span class="badge ${r.recommendation === 'a_book' ? 'badge-info' : r.recommendation === 'b_book' ? 'badge-purple' : 'badge-warning'}">${r.recommendation === 'a_book' ? 'A-BOOK' : r.recommendation === 'b_book' ? 'B-BOOK' : 'REVIEW'}</span></td>
-                <td class="text-sm" style="max-width:250px;white-space:normal">${r.reason}</td>
-                <td>
-                  ${r.currentBook === 'b_book' ? `<button class="btn btn-xs btn-info" onclick="DealingDeskRenderer.reroute('${r.accountId}', 'a_book')">&#8594; A</button>` : `<button class="btn btn-xs btn-purple" onclick="DealingDeskRenderer.reroute('${r.accountId}', 'b_book')">&#8594; B</button>`}
-                  <button class="btn btn-xs btn-secondary" onclick="RuinRenderer.selectAccount('${r.accountId}'); BO.navigate('ruin-analysis')">Analyze</button>
-                </td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-          </div>
-        </div>
-      </div>
-    `;
+    const rows = routing.map(r => `<tr>
+      <td>${r.login}</td>
+      <td>${r.name}</td>
+      <td>${U.pct((r.winRate || 0) * 100)}</td>
+      <td class="${(r.edgePerTrade || 0) >= 0 ? 'positive' : 'negative'}">${U.money(r.edgePerTrade || 0)}</td>
+      <td>${U.pct((r.kellyFraction || 0) * 100)}</td>
+      <td>${C.porBadge(r.por || 0)}</td>
+      <td>${C.toxBadge(r.toxicity)}</td>
+      <td>${C.bookBadge(r.currentBook)}</td>
+      <td><span class="badge ${r.recommendation === 'a_book' ? 'badge-info' : r.recommendation === 'b_book' ? 'badge-purple' : 'badge-warning'}">${r.recommendation === 'a_book' ? 'A-BOOK' : r.recommendation === 'b_book' ? 'B-BOOK' : 'REVIEW'}</span></td>
+      <td class="text-sm" style="max-width:250px;white-space:normal">${r.reason}</td>
+      <td>
+        ${r.currentBook === 'b_book'
+          ? C.actionBtn('&#8594; A', `DealingDeskRenderer.reroute('${r.accountId}', 'a_book')`, 'info')
+          : C.actionBtn('&#8594; B', `DealingDeskRenderer.reroute('${r.accountId}', 'b_book')`, 'purple')}
+        ${C.actionBtn('Analyze', `RuinRenderer.selectAccount('${r.accountId}'); BO.navigate('ruin-analysis')`, 'secondary')}
+      </td>
+    </tr>`);
+
+    const table = C.simpleTable(
+      ['Login', 'Name', 'Win Rate', 'Edge/Trade', 'Kelly %', 'PoR', 'Toxicity', 'Current', 'Recommended', 'Reason', 'Actions'],
+      rows);
+
+    const routingCard = C.card('Account Routing Table — PoR-Enhanced', table, {
+      actions: `<a class="btn btn-sm btn-primary" onclick="BO.navigate('ruin-analysis')">Open Ruin Analysis</a>`,
+    });
+
+    U.$('#view-rerouting').innerHTML = routingCard;
   },
 
   reroute(accountId, newBook) {
@@ -158,35 +142,34 @@ const DealingDeskRenderer = {
     const avgSlippage = rq.reduce((s, r) => s + Math.abs(r.slippage), 0) / (rq.length || 1);
     const acceptRate = (rq.filter(r => r.accepted).length / (rq.length || 1)) * 100;
 
-    U.$('#view-requotes').innerHTML = `
-      <div class="kpi-grid kpi-grid-4">
-        <div class="kpi-card"><div class="kpi-label">Total Requotes</div><div class="kpi-value">${rq.length}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Accept Rate</div><div class="kpi-value">${U.pct(acceptRate)}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Avg Slippage</div><div class="kpi-value">${U.pips(avgSlippage)} pips</div></div>
-        <div class="kpi-card"><div class="kpi-label">Rejected</div><div class="kpi-value">${rq.filter(r => !r.accepted).length}</div></div>
-      </div>
-      <div class="card">
-        <div class="card-body">
-          <table class="data-table compact">
-            <thead><tr><th>Time</th><th>Login</th><th>Symbol</th><th>Dir</th><th>Vol</th><th>Requested</th><th>Offered</th><th>Slippage</th><th>Accepted</th><th>Reason</th></tr></thead>
-            <tbody>
-              ${rq.map(r => `<tr>
-                <td>${U.datetime(r.timestamp)}</td>
-                <td>${r.login}</td>
-                <td>${r.symbol}</td>
-                <td><span class="badge ${r.direction === 'buy' ? 'badge-success' : 'badge-danger'}">${r.direction}</span></td>
-                <td>${U.lots(r.volume)}</td>
-                <td>${U.num(r.requestedPrice, 5)}</td>
-                <td>${U.num(r.offeredPrice, 5)}</td>
-                <td class="${Math.abs(r.slippage) > CONFIG.THRESHOLDS.SLIPPAGE_WARNING ? 'text-warning' : ''}">${U.pips(r.slippage)}</td>
-                <td>${r.accepted ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-danger">No</span>'}</td>
-                <td class="text-sm">${r.reason}</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
+    const kpis = C.kpiGrid([
+      C.kpi('Total Requotes', rq.length),
+      C.kpi('Accept Rate', U.pct(acceptRate)),
+      C.kpi('Avg Slippage', `${U.pips(avgSlippage)} pips`),
+      C.kpi('Rejected', rq.filter(r => !r.accepted).length),
+    ], 4);
+
+    const rows = rq.map(r => `<tr>
+      <td>${U.datetime(r.timestamp)}</td>
+      <td>${r.login}</td>
+      <td>${r.symbol}</td>
+      <td>${C.dirBadge(r.direction)}</td>
+      <td>${U.lots(r.volume)}</td>
+      <td>${U.num(r.requestedPrice, 5)}</td>
+      <td>${U.num(r.offeredPrice, 5)}</td>
+      <td>${C.slippage(r.slippage)}</td>
+      <td>${r.accepted ? C.badge('Yes', 'success') : C.badge('No', 'danger')}</td>
+      <td class="text-sm">${r.reason}</td>
+    </tr>`);
+
+    const table = C.simpleTable(
+      ['Time', 'Login', 'Symbol', 'Dir', 'Vol', 'Requested', 'Offered', 'Slippage', 'Accepted', 'Reason'],
+      rows,
+      { compact: true });
+
+    const tableCard = C.card(null, table);
+
+    U.$('#view-requotes').innerHTML = `${kpis}${tableCard}`;
   },
 
   // News & Events
@@ -194,31 +177,28 @@ const DealingDeskRenderer = {
     Header.setTitle('News & Event Risk');
     const events = S.dealingDesk.newsEvents;
 
-    U.$('#view-news-risk').innerHTML = `
-      <div class="page-actions">
-        <button class="btn btn-primary" onclick="DealingDeskRenderer.addNewsEvent()">+ Add Event</button>
-      </div>
-      <div class="card">
-        <div class="card-header"><h3>Upcoming High-Impact Events</h3></div>
-        <div class="card-body">
-          <table class="data-table">
-            <thead><tr><th>Event</th><th>Time</th><th>Impact</th><th>Spread Mult.</th><th>Margin Mult.</th><th>Affected Symbols</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody>
-              ${events.map(e => `<tr>
-                <td><strong>${e.name}</strong></td>
-                <td>${U.datetime(e.time)}</td>
-                <td><span class="badge ${e.impact === 'high' ? 'badge-danger' : e.impact === 'medium' ? 'badge-warning' : 'badge-info'}">${e.impact}</span></td>
-                <td>${e.spreadMultiplier}x</td>
-                <td>${e.marginMultiplier}x</td>
-                <td class="text-sm">${e.affectedSymbols.join(', ')}</td>
-                <td><span class="badge ${U.statusClass(e.status)}">${e.status}</span></td>
-                <td><button class="btn btn-xs btn-secondary" onclick="DealingDeskRenderer.editNewsEvent('${e.id}')">Edit</button></td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
+    const actions = C.pageActions([
+      { label: '+ Add Event', onclick: 'DealingDeskRenderer.addNewsEvent()', variant: 'primary' },
+    ]);
+
+    const rows = events.map(e => `<tr>
+      <td><strong>${e.name}</strong></td>
+      <td>${U.datetime(e.time)}</td>
+      <td>${C.impactBadge(e.impact)}</td>
+      <td>${e.spreadMultiplier}x</td>
+      <td>${e.marginMultiplier}x</td>
+      <td class="text-sm">${e.affectedSymbols.join(', ')}</td>
+      <td>${C.badge(e.status)}</td>
+      <td>${C.actionBtn('Edit', `DealingDeskRenderer.editNewsEvent('${e.id}')`, 'secondary')}</td>
+    </tr>`);
+
+    const table = C.simpleTable(
+      ['Event', 'Time', 'Impact', 'Spread Mult.', 'Margin Mult.', 'Affected Symbols', 'Status', 'Actions'],
+      rows);
+
+    const tableCard = C.card('Upcoming High-Impact Events', table);
+
+    U.$('#view-news-risk').innerHTML = `${actions}${tableCard}`;
   },
 
   addNewsEvent() {
@@ -256,38 +236,36 @@ const DealingDeskRenderer = {
     Header.setTitle('Stop-Out Review');
     const queue = S.dealingDesk.stopoutQueue;
 
-    U.$('#view-stopout-review').innerHTML = `
-      <div class="kpi-grid kpi-grid-4">
-        <div class="kpi-card kpi-danger"><div class="kpi-label">Accounts at Risk</div><div class="kpi-value">${queue.length}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Large Accounts</div><div class="kpi-value">${queue.filter(q => q.isLargeAccount).length}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Pending Review</div><div class="kpi-value">${queue.filter(q => q.reviewStatus === 'pending').length}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Avg Margin Level</div><div class="kpi-value">${U.pct(queue.reduce((s,q) => s + q.marginLevel, 0) / (queue.length || 1), 0)}</div></div>
-      </div>
-      <div class="card">
-        <div class="card-body">
-          <table class="data-table">
-            <thead><tr><th>Login</th><th>Name</th><th>Equity</th><th>Margin</th><th>Margin Level</th><th>Unreal. P&L</th><th>Positions</th><th>Large?</th><th>Review</th><th>Actions</th></tr></thead>
-            <tbody>
-              ${queue.sort((a, b) => a.marginLevel - b.marginLevel).map(q => `<tr class="${q.marginLevel < CONFIG.THRESHOLDS.STOPOUT_LEVEL ? 'row-danger' : q.marginLevel < CONFIG.THRESHOLDS.MARGIN_LEVEL_DANGER ? 'row-warning' : ''}">
-                <td>${q.login}</td>
-                <td>${q.name}</td>
-                <td>${U.money(q.equity)}</td>
-                <td>${U.money(q.margin)}</td>
-                <td class="text-danger"><strong>${U.pct(q.marginLevel, 0)}</strong></td>
-                <td class="${U.pnlClass(q.unrealizedPnl)}">${U.money(q.unrealizedPnl)}</td>
-                <td>${q.openPositions}</td>
-                <td>${q.isLargeAccount ? '<span class="badge badge-warning">LARGE</span>' : '-'}</td>
-                <td><span class="badge ${U.statusClass(q.reviewStatus)}">${q.reviewStatus}</span></td>
-                <td>
-                  <button class="btn btn-xs btn-success" onclick="DealingDeskRenderer.approveStopout('${q.accountId}')">Approve</button>
-                  <button class="btn btn-xs btn-warning" onclick="DealingDeskRenderer.deferStopout('${q.accountId}')">Defer</button>
-                </td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
+    const kpis = C.kpiGrid([
+      C.kpi('Accounts at Risk', queue.length, undefined, { variant: 'danger' }),
+      C.kpi('Large Accounts', queue.filter(q => q.isLargeAccount).length),
+      C.kpi('Pending Review', queue.filter(q => q.reviewStatus === 'pending').length),
+      C.kpi('Avg Margin Level', U.pct(queue.reduce((s, q) => s + q.marginLevel, 0) / (queue.length || 1), 0)),
+    ], 4);
+
+    const rows = queue.sort((a, b) => a.marginLevel - b.marginLevel).map(q => `<tr class="${q.marginLevel < CONFIG.THRESHOLDS.STOPOUT_LEVEL ? 'row-danger' : q.marginLevel < CONFIG.THRESHOLDS.MARGIN_LEVEL_DANGER ? 'row-warning' : ''}">
+      <td>${q.login}</td>
+      <td>${q.name}</td>
+      <td>${U.money(q.equity)}</td>
+      <td>${U.money(q.margin)}</td>
+      <td>${C.marginLevel(q.marginLevel)}</td>
+      <td>${C.pnl(q.unrealizedPnl)}</td>
+      <td>${q.openPositions}</td>
+      <td>${q.isLargeAccount ? C.badge('LARGE', 'warning') : '-'}</td>
+      <td>${C.badge(q.reviewStatus)}</td>
+      <td>
+        ${C.actionBtn('Approve', `DealingDeskRenderer.approveStopout('${q.accountId}')`, 'success')}
+        ${C.actionBtn('Defer', `DealingDeskRenderer.deferStopout('${q.accountId}')`, 'warning')}
+      </td>
+    </tr>`);
+
+    const table = C.simpleTable(
+      ['Login', 'Name', 'Equity', 'Margin', 'Margin Level', 'Unreal. P&L', 'Positions', 'Large?', 'Review', 'Actions'],
+      rows);
+
+    const tableCard = C.card(null, table);
+
+    U.$('#view-stopout-review').innerHTML = `${kpis}${tableCard}`;
   },
 
   approveStopout(accountId) {

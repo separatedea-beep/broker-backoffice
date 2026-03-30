@@ -100,7 +100,109 @@ const Table = {
   },
 
   export(containerId, keys) {
-    // Grab the data from the current state based on container
     Toast.info('Exporting...');
+  },
+};
+
+
+/**
+ * Pre-built column configurations for common data types.
+ * Usage: Table.render('id', { columns: [Columns.money('balance','Balance'), Columns.book('book')], data })
+ */
+const Columns = {
+  /** Right-aligned money column */
+  money(key, label, ccy) {
+    return { key, label, align: 'right', render: (v) => U.money(v, ccy) };
+  },
+  /** P&L with color and sign */
+  pnl(key, label) {
+    return { key, label, align: 'right', render: (v) => C.pnl(v) };
+  },
+  /** Bold P&L */
+  pnlBold(key, label) {
+    return { key, label, align: 'right', render: (v) => C.pnlBold(v) };
+  },
+  /** Status badge (auto-colored) */
+  badge(key, label) {
+    return { key, label, render: (v) => C.badge(v) };
+  },
+  /** A/B Book badge */
+  book(key = 'book') {
+    return { key, label: 'Book', render: (v) => C.bookBadge(v) };
+  },
+  /** Buy/Sell direction badge */
+  direction(key = 'direction') {
+    return { key, label: 'Dir', render: (v) => C.dirBadge(v) };
+  },
+  /** Formatted date */
+  date(key, label) {
+    return { key, label, render: (v) => U.date(v) };
+  },
+  /** Formatted datetime */
+  datetime(key, label) {
+    return { key, label, render: (v) => U.datetime(v) };
+  },
+  /** Time ago */
+  ago(key, label) {
+    return { key, label, render: (v) => U.ago(v) };
+  },
+  /** Lot volume */
+  lots(key, label = 'Volume') {
+    return { key, label, align: 'right', render: (v) => U.lots(v) };
+  },
+  /** Percentage */
+  pct(key, label, dec = 1) {
+    return { key, label, align: 'right', render: (v) => U.pct(v, dec) };
+  },
+  /** Toxicity badge */
+  toxicity(key = 'toxicity') {
+    return { key, label: 'Toxicity', align: 'center', render: (v) => C.toxBadge(v) };
+  },
+  /** PoR badge */
+  por(key = 'por') {
+    return { key, label: 'PoR', align: 'center', render: (v) => C.porBadge(v) };
+  },
+  /** Margin level with threshold coloring */
+  marginLevel(key = 'marginLevel') {
+    return { key, label: 'Margin %', align: 'right', render: (v) => C.marginLevel(v) };
+  },
+  /** Latency with warning threshold */
+  latency(key, label = 'Latency') {
+    return { key, label, align: 'right', render: (v) => C.latency(v) };
+  },
+  /** Slippage with warning */
+  slippage(key, label = 'Slippage') {
+    return { key, label, align: 'right', render: (v) => C.slippage(v) };
+  },
+  /** Clickable name (text-primary) */
+  name(key, label = 'Name') {
+    return { key, label, render: (v) => `<span class="text-primary">${U.escape(v)}</span>` };
+  },
+  /** Leverage display */
+  leverage(key = 'leverage') {
+    return { key, label: 'Lev', width: '50px', render: (v) => '1:' + v };
+  },
+  /** Number with decimal places */
+  num(key, label, dec = 2) {
+    return { key, label, align: 'right', render: (v) => U.num(v, dec) };
+  },
+  /** Text column (basic, sortable) */
+  text(key, label, opts = {}) {
+    return { key, label, ...opts };
+  },
+  /** Dispute flag icon */
+  disputeFlag(key = 'disputeFlag') {
+    return { key, label: '!', width: '30px', render: (v) => v ? '<span class="text-danger" title="Disputed">&#9888;</span>' : '' };
+  },
+  /** Risk flags array */
+  riskFlags(key = 'riskFlags') {
+    return { key, label: 'Flags', render: (v) => v && v.length ? v.map(f => C.badge(f, 'danger')).join(' ') : '-' };
+  },
+  /** Utilisation progress bar */
+  utilisation(key, label = 'Utilisation') {
+    return { key, label, render: (v, row) => {
+      const max = row.creditLine || 100;
+      return C.progressBar(v, 100) + `<span class="text-sm">${U.pct(v)}</span>`;
+    }};
   },
 };

@@ -6,42 +6,42 @@ const TradesRenderer = {
     Header.setTitle('Trade History');
     const f = S.trades.filters;
 
-    U.$('#view-trades').innerHTML = `
-      <div class="card">
-        <div id="trades-table"></div>
-      </div>
-    `;
-
     let list = S.trades.history;
     if (f.symbol) list = list.filter(t => t.symbol === f.symbol);
     if (f.account) list = list.filter(t => t.accountId === f.account || String(t.accountLogin).includes(f.account));
 
+    U.$('#view-trades').innerHTML = `
+      ${C.card('', '<div id="trades-table"></div>')}
+    `;
+
+    const filters = C.filterBar([
+      { type: 'search', placeholder: 'Account...', value: f.account, onChange: "S.trades.filters.account=this.value; TradesRenderer.render()" },
+      { type: 'select', label: 'Symbols', value: f.symbol, onChange: "S.trades.filters.symbol=this.value; TradesRenderer.render()", options: [
+        { value: '', label: 'All Symbols' },
+        ...[...new Set(S.trades.history.map(t => t.symbol))].sort().map(s => ({ value: s, label: s })),
+      ]},
+    ]);
+
     Table.render('trades-table', {
       title: `${list.length} Trades`,
-      filters: `
-        <input type="text" class="form-control form-sm" placeholder="Account..." value="${f.account}" oninput="S.trades.filters.account=this.value; TradesRenderer.render()">
-        <select class="form-control form-sm" onchange="S.trades.filters.symbol=this.value; TradesRenderer.render()">
-          <option value="">All Symbols</option>
-          ${[...new Set(S.trades.history.map(t => t.symbol))].sort().map(s => `<option value="${s}" ${f.symbol === s ? 'selected' : ''}>${s}</option>`).join('')}
-        </select>
-      `,
+      filters,
       columns: [
-        { key: 'ticket', label: 'Ticket', width: '80px' },
-        { key: 'accountLogin', label: 'Login', width: '60px' },
-        { key: 'symbol', label: 'Symbol' },
-        { key: 'direction', label: 'Dir', render: (v) => `<span class="badge ${v === 'buy' ? 'badge-success' : 'badge-danger'}">${v}</span>` },
-        { key: 'volume', label: 'Volume', align: 'right', render: (v) => U.lots(v) },
+        Columns.text('ticket', 'Ticket', { width: '80px' }),
+        Columns.text('accountLogin', 'Login', { width: '60px' }),
+        Columns.text('symbol', 'Symbol'),
+        Columns.direction('direction'),
+        Columns.lots('volume'),
         { key: 'openPrice', label: 'Open', align: 'right' },
         { key: 'closePrice', label: 'Close', align: 'right' },
-        { key: 'pnl', label: 'P&L', align: 'right', render: (v) => `<span class="${U.pnlClass(v)}">${U.pnlSign(v)}${U.money(v)}</span>` },
-        { key: 'commission', label: 'Comm.', align: 'right', render: (v) => U.money(v) },
-        { key: 'swap', label: 'Swap', align: 'right', render: (v) => U.money(v) },
-        { key: 'book', label: 'Book', render: (v) => `<span class="badge ${v === 'a_book' ? 'badge-info' : 'badge-purple'}">${v === 'a_book' ? 'A' : 'B'}</span>` },
-        { key: 'lp', label: 'LP' },
-        { key: 'fillLatency', label: 'Lat(ms)', align: 'right', render: (v) => `<span class="${v > CONFIG.THRESHOLDS.LATENCY_WARNING ? 'text-warning' : ''}">${v}</span>` },
-        { key: 'slippage', label: 'Slip', align: 'right', render: (v) => `<span class="${Math.abs(v) > CONFIG.THRESHOLDS.SLIPPAGE_WARNING ? 'text-warning' : ''}">${U.pips(v)}</span>` },
-        { key: 'closeTime', label: 'Closed', render: (v) => U.datetime(v) },
-        { key: 'disputeFlag', label: '!', width: '30px', render: (v) => v ? '<span class="text-danger" title="Disputed">&#9888;</span>' : '' },
+        Columns.pnl('pnl', 'P&L'),
+        Columns.money('commission', 'Comm.'),
+        Columns.money('swap', 'Swap'),
+        Columns.book('book'),
+        Columns.text('lp', 'LP'),
+        Columns.latency('fillLatency', 'Lat(ms)'),
+        Columns.slippage('slippage', 'Slip'),
+        Columns.datetime('closeTime', 'Closed'),
+        Columns.disputeFlag('disputeFlag'),
       ],
       data: list,
       page: S.trades.page,
@@ -52,34 +52,28 @@ const TradesRenderer = {
   // Swaps & Rollovers
   renderSwaps() {
     Header.setTitle('Swaps & Rollovers');
-    U.$('#view-swaps').innerHTML = `
-      <div class="card">
-        <div class="card-header"><h3>Current Swap Rates</h3></div>
-        <div class="card-body">
-          <table class="data-table">
-            <thead><tr><th>Symbol</th><th>Long Swap</th><th>Short Swap</th><th>Triple Day</th><th>Positions Affected</th><th>Total Charged</th><th>Last Rollover</th><th>Actions</th></tr></thead>
-            <tbody>
-              ${S.trades.swapRollovers.map(s => `<tr>
-                <td><strong>${s.symbol}</strong></td>
-                <td class="${s.longSwap < 0 ? 'negative' : 'positive'}">${U.num(s.longSwap)}</td>
-                <td class="${s.shortSwap < 0 ? 'negative' : 'positive'}">${U.num(s.shortSwap)}</td>
-                <td>${s.tripleDay}</td>
-                <td>${s.positionsAffected}</td>
-                <td class="negative">${U.money(s.totalSwapCharged)}</td>
-                <td>${U.date(s.lastRollover)}</td>
-                <td><button class="btn btn-xs btn-secondary" onclick="TradesRenderer.editSwap('${s.symbol}')">Edit</button></td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
+
+    const swapBody = C.simpleTable(
+      ['Symbol', 'Long Swap', 'Short Swap', 'Triple Day', 'Positions Affected', 'Total Charged', 'Last Rollover', 'Actions'],
+      S.trades.swapRollovers.map(s => `<tr>
+        <td><strong>${U.escape(s.symbol)}</strong></td>
+        <td class="${s.longSwap < 0 ? 'negative' : 'positive'}">${U.num(s.longSwap)}</td>
+        <td class="${s.shortSwap < 0 ? 'negative' : 'positive'}">${U.num(s.shortSwap)}</td>
+        <td>${U.escape(s.tripleDay)}</td>
+        <td>${s.positionsAffected}</td>
+        <td class="negative">${U.money(s.totalSwapCharged)}</td>
+        <td>${U.date(s.lastRollover)}</td>
+        <td>${C.actionBtn('Edit', "TradesRenderer.editSwap('" + s.symbol + "')")}</td>
+      </tr>`)
+    );
+
+    U.$('#view-swaps').innerHTML = C.card('Current Swap Rates', swapBody);
   },
 
   editSwap(symbol) {
     const s = S.trades.swapRollovers.find(x => x.symbol === symbol);
     if (!s) return;
-    Modal.form('Edit Swap — ' + symbol, [
+    Modal.form('Edit Swap \u2014 ' + symbol, [
       { name: 'longSwap', label: 'Long Swap (points)', type: 'number', value: s.longSwap },
       { name: 'shortSwap', label: 'Short Swap (points)', type: 'number', value: s.shortSwap },
       { name: 'tripleDay', label: 'Triple Swap Day', type: 'select', options: ['Monday','Tuesday','Wednesday','Thursday','Friday'].map(d => ({ value: d, label: d })), value: s.tripleDay },
@@ -95,37 +89,52 @@ const TradesRenderer = {
   // Corporate Actions
   renderCorporateActions() {
     Header.setTitle('Corporate Actions');
+
+    const actions = C.pageActions([
+      { label: '+ New Action', onclick: "TradesRenderer.newCorporateAction()", variant: 'primary' },
+    ]);
+
+    const allActions = [
+      ...S.trades.corporateActions.map(ca => ({
+        id: ca.id,
+        symbol: ca.symbol,
+        type: ca.type,
+        details: ca.ratio || (ca.amount ? U.money(ca.amount) : '-'),
+        exDate: ca.exDate,
+        status: ca.status,
+        extra: '',
+        isPending: ca.status === 'pending',
+        processAction: `TradesRenderer.processCorporateAction('${ca.id}')`,
+      })),
+      ...S.trades.dividendAdjustments.map(d => ({
+        id: d.id,
+        symbol: d.symbol,
+        type: 'dividend',
+        details: U.money(d.amount, d.currency) + ' per contract',
+        exDate: d.exDate,
+        status: d.status,
+        extra: ` (${d.positionsAffected} pos)`,
+        isPending: d.status === 'pending',
+        processAction: `TradesRenderer.processDividend('${d.id}')`,
+      })),
+    ];
+
+    const tableBody = C.simpleTable(
+      ['ID', 'Symbol', 'Type', 'Details', 'Ex-Date', 'Status', 'Actions'],
+      allActions.map(a => `<tr>
+        <td>${U.escape(a.id)}</td>
+        <td><strong>${U.escape(a.symbol)}</strong></td>
+        <td>${C.badge(U.statusLabel(a.type), 'info')}</td>
+        <td>${a.details}</td>
+        <td>${U.escape(a.exDate)}</td>
+        <td>${C.badge(a.status)}${a.extra}</td>
+        <td>${a.isPending ? C.actionBtn('Process', a.processAction, 'success') : '-'}</td>
+      </tr>`)
+    );
+
     U.$('#view-corporate-actions').innerHTML = `
-      <div class="page-actions">
-        <button class="btn btn-primary" onclick="TradesRenderer.newCorporateAction()">+ New Action</button>
-      </div>
-      <div class="card">
-        <div class="card-body">
-          <table class="data-table">
-            <thead><tr><th>ID</th><th>Symbol</th><th>Type</th><th>Details</th><th>Ex-Date</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody>
-              ${S.trades.corporateActions.map(ca => `<tr>
-                <td>${ca.id}</td>
-                <td><strong>${ca.symbol}</strong></td>
-                <td><span class="badge badge-info">${ca.type.replace(/_/g, ' ')}</span></td>
-                <td>${ca.ratio || (ca.amount ? U.money(ca.amount) : '-')}</td>
-                <td>${ca.exDate}</td>
-                <td><span class="badge ${U.statusClass(ca.status)}">${ca.status}</span></td>
-                <td>${ca.status === 'pending' ? `<button class="btn btn-xs btn-success" onclick="TradesRenderer.processCorporateAction('${ca.id}')">Process</button>` : '-'}</td>
-              </tr>`).join('')}
-              ${S.trades.dividendAdjustments.map(d => `<tr>
-                <td>${d.id}</td>
-                <td><strong>${d.symbol}</strong></td>
-                <td><span class="badge badge-success">dividend</span></td>
-                <td>${U.money(d.amount, d.currency)} per contract</td>
-                <td>${d.exDate}</td>
-                <td><span class="badge ${U.statusClass(d.status)}">${d.status}</span> (${d.positionsAffected} pos)</td>
-                <td>${d.status === 'pending' ? `<button class="btn btn-xs btn-success" onclick="TradesRenderer.processDividend('${d.id}')">Process</button>` : '-'}</td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      ${actions}
+      ${C.card('', tableBody)}
     `;
   },
 
@@ -160,36 +169,31 @@ const TradesRenderer = {
   // Disputes
   renderDisputes() {
     Header.setTitle('Trade Disputes');
-    U.$('#view-disputes').innerHTML = `
-      <div class="card">
-        <div class="card-body">
-          <table class="data-table">
-            <thead><tr><th>ID</th><th>Ticket</th><th>Account</th><th>Symbol</th><th>Issue</th><th>Priority</th><th>Status</th><th>Claimed Loss</th><th>Compensation</th><th>Assigned</th><th>Opened</th><th>Actions</th></tr></thead>
-            <tbody>
-              ${S.trades.disputes.map(d => `<tr>
-                <td>${d.id}</td>
-                <td>${d.ticket}</td>
-                <td>${d.accountId}</td>
-                <td>${d.symbol}</td>
-                <td class="text-sm">${d.issue}</td>
-                <td><span class="badge ${d.priority === 'high' ? 'badge-danger' : d.priority === 'medium' ? 'badge-warning' : 'badge-info'}">${d.priority}</span></td>
-                <td><span class="badge ${U.statusClass(d.status)}">${d.status}</span></td>
-                <td>${U.money(d.claimedLoss)}</td>
-                <td>${U.money(d.compensation)}</td>
-                <td>${d.assignedTo}</td>
-                <td>${U.date(d.openedAt)}</td>
-                <td>
-                  ${d.status === 'open' || d.status === 'investigating' ? `
-                    <button class="btn btn-xs btn-success" onclick="TradesRenderer.resolveDispute('${d.id}', 'resolved_broker')">Resolve (Broker)</button>
-                    <button class="btn btn-xs btn-warning" onclick="TradesRenderer.resolveDispute('${d.id}', 'resolved_client')">Resolve (Client)</button>
-                  ` : '-'}
-                </td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    `;
+
+    const tableBody = C.simpleTable(
+      ['ID', 'Ticket', 'Account', 'Symbol', 'Issue', 'Priority', 'Status', 'Claimed Loss', 'Compensation', 'Assigned', 'Opened', 'Actions'],
+      S.trades.disputes.map(d => `<tr>
+        <td>${U.escape(d.id)}</td>
+        <td>${U.escape(d.ticket)}</td>
+        <td>${U.escape(d.accountId)}</td>
+        <td>${U.escape(d.symbol)}</td>
+        <td class="text-sm">${U.escape(d.issue)}</td>
+        <td>${C.priorityBadge(d.priority)}</td>
+        <td>${C.badge(d.status)}</td>
+        <td>${U.money(d.claimedLoss)}</td>
+        <td>${U.money(d.compensation)}</td>
+        <td>${U.escape(d.assignedTo)}</td>
+        <td>${U.date(d.openedAt)}</td>
+        <td>
+          ${d.status === 'open' || d.status === 'investigating' ? `
+            ${C.actionBtn('Resolve (Broker)', "TradesRenderer.resolveDispute('" + d.id + "', 'resolved_broker')", 'success')}
+            ${C.actionBtn('Resolve (Client)', "TradesRenderer.resolveDispute('" + d.id + "', 'resolved_client')", 'warning')}
+          ` : '-'}
+        </td>
+      </tr>`)
+    );
+
+    U.$('#view-disputes').innerHTML = C.card('', tableBody);
   },
 
   resolveDispute(id, resolution) {
@@ -201,7 +205,7 @@ const TradesRenderer = {
           { name: 'amount', label: 'Compensation ($)', type: 'number', value: d.claimedLoss },
         ], (data) => {
           d.compensation = parseFloat(data.amount) || 0;
-          Toast.success('Dispute resolved — client compensated');
+          Toast.success('Dispute resolved \u2014 client compensated');
           BO.renderCurrentView();
         });
         return;
